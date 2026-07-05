@@ -391,8 +391,9 @@ function startLeg(introMsg){
 
 // ---------- input ----------
 function setAim(clientX, clientY, liftY){
+  // liftY is in *screen* px (subtracted before scaling to canvas units)
   const r=cv.getBoundingClientRect();
-  const x=(clientX-r.left)*cv.width/r.width, y=(clientY-r.top)*cv.height/r.height - (liftY||0);
+  const x=(clientX-r.left)*cv.width/r.width, y=(clientY-r.top-(liftY||0))*cv.height/r.height;
   G.hand.tx=Math.max(30,Math.min(cv.width-30,x));
   G.hand.ty=Math.max(30,Math.min(CY+R,y));
 }
@@ -401,8 +402,9 @@ cv.addEventListener('mousemove', e=>setAim(e.clientX,e.clientY));
 cv.addEventListener('mousedown', startCharge);
 addEventListener('mouseup', ()=>{ if(G.state==='charging') throwDart(); });
 // touch: press to aim + charge, drag to adjust, release to throw
-// (aim sits above the fingertip so the finger doesn't hide the landing spot)
-const TOUCH_LIFT=70;
+// (aim sits above the fingertip so the finger doesn't hide the hand;
+//  screen px, so the gap is the same physical distance on any device)
+const TOUCH_LIFT=100;
 cv.addEventListener('touchstart', e=>{
   e.preventDefault();
   setAim(e.touches[0].clientX, e.touches[0].clientY, TOUCH_LIFT);
