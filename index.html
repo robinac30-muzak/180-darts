@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ONE-EIGHT-ZERO</title>
 <style>
   :root{
@@ -47,7 +47,8 @@
     margin-bottom:6px; font-weight:bold;
   }
   #layout{display:flex; gap:18px; align-items:flex-start;}
-  canvas{display:block; image-rendering:pixelated; cursor:crosshair; background:#000;}
+  canvas{display:block; image-rendering:pixelated; cursor:crosshair; background:#000; touch-action:none;}
+  button, input{touch-action:manipulation;}
   #panel{
     width:280px; border:3px solid var(--cyan);
     padding:12px; font-weight:bold;
@@ -114,6 +115,33 @@
   #btnResume{display:none; color:var(--yellow); border-color:var(--yellow);}
   #btnResume:hover{background:var(--yellow); color:#000;}
   #career{font-size:11px; color:#9a9a9a; letter-spacing:1px; margin-top:6px;}
+  /* ---- mobile / narrow screens ---- */
+  @media (max-width:720px){
+    body{
+      overflow:auto; overscroll-behavior:none;
+      align-items:flex-start; justify-content:center;
+    }
+    #frame{padding:8px; margin:6px auto; max-width:100%;}
+    #screen{padding:8px 8px 12px;}
+    h1{font-size:18px; letter-spacing:3px; text-shadow:2px 2px 0 var(--magenta);}
+    #layout{flex-direction:column; gap:10px;}
+    canvas{width:100%; height:auto;}
+    #panel{
+      width:100%; padding:8px 10px;
+      display:grid; grid-template-columns:1fr 1fr; gap:2px 12px;
+      align-items:start;
+    }
+    #panel hr{display:none;}
+    .pscore{font-size:30px;}
+    .sub{margin-bottom:4px; min-height:0;}
+    #visit,#legs,#newleg,#menuBtn{grid-column:1/-1;}
+    #legs{margin-top:4px;}
+    #msg{font-size:13px; letter-spacing:1px;}
+    #help{font-size:10px;}
+    .mbtn{width:min(340px,86%); font-size:15px; padding:12px;}
+    #menu{gap:14px;}
+    #nameIn{width:150px;}
+  }
 </style>
 </head>
 <body>
@@ -362,14 +390,33 @@ function startLeg(introMsg){
 }
 
 // ---------- input ----------
-cv.addEventListener('mousemove', e=>{
+function setAim(clientX, clientY, liftY){
   const r=cv.getBoundingClientRect();
-  const x=(e.clientX-r.left)*cv.width/r.width, y=(e.clientY-r.top)*cv.height/r.height;
+  const x=(clientX-r.left)*cv.width/r.width, y=(clientY-r.top)*cv.height/r.height - (liftY||0);
   G.hand.tx=Math.max(30,Math.min(cv.width-30,x));
   G.hand.ty=Math.max(30,Math.min(CY+R,y));
-});
-cv.addEventListener('mousedown', ()=>{ if(G.state==='aim'){ G.state='charging'; G.power=0; G.pdir=1; ac(); }});
+}
+function startCharge(){ if(G.state==='aim'){ G.state='charging'; G.power=0; G.pdir=1; ac(); } }
+cv.addEventListener('mousemove', e=>setAim(e.clientX,e.clientY));
+cv.addEventListener('mousedown', startCharge);
 addEventListener('mouseup', ()=>{ if(G.state==='charging') throwDart(); });
+// touch: press to aim + charge, drag to adjust, release to throw
+// (aim sits above the fingertip so the finger doesn't hide the landing spot)
+const TOUCH_LIFT=70;
+cv.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  setAim(e.touches[0].clientX, e.touches[0].clientY, TOUCH_LIFT);
+  G.hand.x=G.hand.tx; G.hand.y=G.hand.ty;   // snap so quick taps throw from the touch point
+  startCharge();
+},{passive:false});
+cv.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  setAim(e.touches[0].clientX, e.touches[0].clientY, TOUCH_LIFT);
+},{passive:false});
+addEventListener('touchend', ()=>{ if(G.state==='charging') throwDart(); });
+addEventListener('touchcancel', ()=>{ if(G.state==='charging') throwDart(); });
+if(matchMedia('(pointer:coarse)').matches)
+  $('help').innerHTML='TOUCH: AIM &nbsp;&bull;&nbsp; HOLD + RELEASE: THROW';
 $('newleg').addEventListener('click', actionBtn);
 $('menuBtn').addEventListener('click', showMenu);
 $('btnSingle').addEventListener('click', ()=>{ ac(); startSingle(); });
@@ -575,13 +622,15 @@ function drawHand(g,x,y,charging){
   g.restore();
 }
 function loop(now){
+  const dt=Math.min(.05,(now/1000-G.t)||0);   // seconds since last frame
   G.t=now/1000;
-  // ease hand to mouse
-  G.hand.x += (G.hand.tx-G.hand.x)*.2;
-  G.hand.y += (G.hand.ty-G.hand.y)*.2;
-  // power
+  // ease hand to mouse (frame-rate independent)
+  const ease=1-Math.pow(.8,dt*60);
+  G.hand.x += (G.hand.tx-G.hand.x)*ease;
+  G.hand.y += (G.hand.ty-G.hand.y)*ease;
+  // power: 144/sec == 2.4 per frame at the original 60fps
   if(G.state==='charging'){
-    G.power += G.pdir*2.4;
+    G.power += G.pdir*144*dt;
     if(G.power>=100){G.power=100;G.pdir=-1;}
     if(G.power<=0 && G.pdir<0){ throwDart(); } // let go too late = duff throw
   }
